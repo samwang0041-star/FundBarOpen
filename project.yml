@@ -1,0 +1,77 @@
+name: FundBar
+options:
+  minimumXcodeGenVersion: 2.38.0
+settings:
+  base:
+    PRODUCT_NAME: FundBar
+    SWIFT_VERSION: 6.0
+    MACOSX_DEPLOYMENT_TARGET: 14.0
+    CODE_SIGN_STYLE: Automatic
+configs:
+  Debug: debug
+  Release: release
+targets:
+  FundBar:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: FundBar
+        excludes:
+          - Resources/Assets.xcassets
+          - Resources/PrivacyInfo.xcprivacy
+    resources:
+      - path: FundBar/Resources/Assets.xcassets
+      - path: FundBar/Resources/AppIcon.icns
+      - path: FundBar/Resources/developer_coding_illustration.png
+      - path: FundBar/Resources/indie_dev_illustration.png
+      - path: FundBar/Resources/wechat_pay_qr.png
+        optional: true
+      - path: FundBar/Resources/alipay_qr.png
+        optional: true
+    info:
+      path: FundBar/Resources/Info.plist
+      properties:
+        CFBundleIconFile: AppIcon
+    entitlements:
+      path: FundBar/Resources/FundBar.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yuriwong.FundBarOpen
+        DEVELOPMENT_TEAM: SL3HYH77EF
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: FundBar/Resources/Info.plist
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        COMBINE_HIDPI_IMAGES: YES
+        CODE_SIGN_ENTITLEMENTS: FundBar/Resources/FundBar.entitlements
+  FundBarTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: FundBarTests
+        excludes:
+          - Fixtures
+    resources:
+      - path: FundBarTests/Fixtures
+    dependencies:
+      - target: FundBar
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_NAME: FundBarTests
+        PRODUCT_MODULE_NAME: FundBarTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.yuriwong.FundBarOpenTests
+        DEVELOPMENT_TEAM: SL3HYH77EF
+schemes:
+  FundBar:
+    build:
+      targets:
+        FundBar: all
+        FundBarTests: [test]
+    test:
+      gatherCoverageData: true
+      targets:
+        - name: FundBarTests

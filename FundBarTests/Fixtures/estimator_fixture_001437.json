@@ -1,0 +1,76 @@
+{
+  "metadata": {
+    "fundCode": "001437",
+    "name": "易方达瑞享混合I",
+    "fundType": "混合型",
+    "managerName": "武阳",
+    "managerCompany": "易方达基金管理有限公司",
+    "riskLevel": "中高风险",
+    "inceptionDate": "2015-06-25",
+    "latestScale": "25.25亿元",
+    "scaleDate": "2025-12-31",
+    "lastNav": 7.8421,
+    "lastNavDate": "2026-03-11",
+    "stockPosition": 95.05,
+    "managementFee": 1.5,
+    "custodyFee": 0.25,
+    "holdingsReportDate": "2025-12-31"
+  },
+  "holdings": [
+    {
+      "code": "300308",
+      "name": "中际旭创",
+      "weight": 95.05
+    }
+  ],
+  "quotes": {
+    "300308": {
+      "code": "300308",
+      "name": "中际旭创",
+      "price": 100.4965,
+      "changePct": 0.4965,
+      "change": 0.4965,
+      "volume": 355826,
+      "marketCap": 500
+    },
+    "000300": {
+      "code": "000300",
+      "name": "沪深300",
+      "price": 4669.14,
+      "changePct": -0.39,
+      "change": -18.42,
+      "volume": 310772009,
+      "marketCap": 549367.93418381
+    },
+    "000905": {
+      "code": "000905",
+      "name": "中证500",
+      "price": 5600.0,
+      "changePct": 0.0,
+      "change": 0.0,
+      "volume": 0,
+      "marketCap": 0
+    },
+    "399006": {
+      "code": "399006",
+      "name": "创业板指",
+      "price": 2200.0,
+      "changePct": 0.0,
+      "change": 0.0,
+      "volume": 0,
+      "marketCap": 0
+    },
+    "000688": {
+      "code": "000688",
+      "name": "科创50",
+      "price": 1000.0,
+      "changePct": 0.0,
+      "change": 0.0,
+      "volume": 0,
+      "marketCap": 0
+    }
+  },
+  "reportCloses": {
+    "300308": 100.0
+  }
+}

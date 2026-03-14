@@ -5,5 +5,5 @@ build
 xcuserdata
 *.xcuserdatad
 *.xcscmblueprint
-*.xcodeproj
+*.code-workspace
 微信图片_*.jpg
