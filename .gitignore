@@ -1,0 +1,9 @@
+.DS_Store
+.build
+DerivedData
+build
+xcuserdata
+*.xcuserdatad
+*.xcscmblueprint
+*.xcodeproj
+微信图片_*.jpg
