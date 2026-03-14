@@ -310,6 +310,162 @@ enum FundParsing {
         return String(raw[raw.index(after: start)..<end])
     }
 
+    // MARK: - Sina Quote Parsing
+
+    /// 解析新浪行情返回文本 `var hq_str_shXXXXXX="名称,开盘价,昨收,当前价,...";` 为 SecurityQuote 字典
+    static func parseSinaQuotes(from raw: String) throws -> [String: SecurityQuote] {
+        let lines = raw.components(separatedBy: ";").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        var quotes: [String: SecurityQuote] = [:]
+
+        for line in lines {
+            guard !line.isEmpty,
+                  let eqIndex = line.firstIndex(of: "=") else { continue }
+            let varPart = String(line[line.startIndex..<eqIndex])
+            let rawCode = varPart.replacingOccurrences(of: "var hq_str_", with: "")
+            let pureCode: String
+            if rawCode.hasPrefix("sh") || rawCode.hasPrefix("sz") {
+                pureCode = String(rawCode.dropFirst(2))
+            } else {
+                continue
+            }
+
+            let valuePart = String(line[line.index(after: eqIndex)...])
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            guard !valuePart.isEmpty else { continue }
+
+            let fields = valuePart.components(separatedBy: ",")
+            // A 股：0=名称 1=开盘价 2=昨收 3=当前价 4=最高 5=最低 8=成交量(股) 9=成交额
+            guard fields.count >= 10 else { continue }
+            let name = fields[0]
+            let price = Double(fields[3]) ?? 0
+            let lastClose = Double(fields[2]) ?? 0
+            let change = price - lastClose
+            let changePct = lastClose > 0 ? (change / lastClose) * 100 : 0
+            let volume = Double(fields[8]) ?? 0
+
+            quotes[pureCode] = SecurityQuote(
+                code: pureCode,
+                name: name,
+                price: price,
+                changePct: changePct,
+                change: change,
+                volume: volume,
+                marketCap: 0
+            )
+        }
+
+        guard !quotes.isEmpty else {
+            throw FundParsingError.invalidJSON("新浪行情数据为空。")
+        }
+        return quotes
+    }
+
+    // MARK: - Tencent Quote Parsing
+
+    /// 解析腾讯行情返回文本 `v_shXXXXXX="51~名称~代码~当前价~昨收~..."` 为 SecurityQuote 字典
+    static func parseTencentQuotes(from raw: String) throws -> [String: SecurityQuote] {
+        let lines = raw.components(separatedBy: ";").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        var quotes: [String: SecurityQuote] = [:]
+
+        for line in lines {
+            guard !line.isEmpty,
+                  let eqIndex = line.firstIndex(of: "=") else { continue }
+            let valuePart = String(line[line.index(after: eqIndex)...])
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            guard !valuePart.isEmpty else { continue }
+
+            let fields = valuePart.components(separatedBy: "~")
+            // 腾讯：1=名称 2=代码 3=当前价 4=昨收 31=涨跌额 32=涨跌幅 36=成交量(手) 45=总市值
+            guard fields.count >= 45 else { continue }
+            let code = fields[2]
+            let name = fields[1]
+            let price = Double(fields[3]) ?? 0
+            let lastClose = Double(fields[4]) ?? 0
+            let change = Double(fields[31]) ?? (price - lastClose)
+            let changePct = Double(fields[32]) ?? (lastClose > 0 ? (change / lastClose) * 100 : 0)
+            let volume = Double(fields[36]) ?? 0
+            let marketCapRaw = Double(fields[45]) ?? 0
+
+            quotes[code] = SecurityQuote(
+                code: code,
+                name: name,
+                price: price,
+                changePct: changePct,
+                change: change,
+                volume: volume,
+                marketCap: marketCapRaw / 100000000
+            )
+        }
+
+        guard !quotes.isEmpty else {
+            throw FundParsingError.invalidJSON("腾讯行情数据为空。")
+        }
+        return quotes
+    }
+
+    // MARK: - Sina Historical K-line Parsing
+
+    /// 解析新浪历史K线JSON: `[{day:"2026-03-13",open:"10.00",close:"10.50",...}]`
+    static func parseSinaHistoricalSeries(from raw: String) throws -> [HistoricalPricePoint] {
+        let cleaned = raw
+            .replacingOccurrences(of: #"(\w+):"#, with: #""$1":"#, options: .regularExpression)
+        guard let data = cleaned.data(using: .utf8) else {
+            throw FundParsingError.invalidJSON("新浪历史K线编码无效。")
+        }
+
+        guard let items = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return []
+        }
+
+        return items.compactMap { item in
+            guard let day = item["day"] as? String else { return nil }
+            let open = doubleFromAny(item["open"])
+            let close = doubleFromAny(item["close"])
+            guard open > 0 || close > 0 else { return nil }
+            return HistoricalPricePoint(date: day, open: open, close: close)
+        }
+    }
+
+    // MARK: - Tencent Historical K-line Parsing
+
+    /// 解析腾讯日K线: `{"data":{"shXXXXXX":{"day":[["2026-03-13","10.00","10.50",...]]}}}`
+    static func parseTencentHistoricalSeries(from raw: String) throws -> [HistoricalPricePoint] {
+        guard let data = raw.data(using: .utf8) else {
+            throw FundParsingError.invalidJSON("腾讯历史K线编码无效。")
+        }
+
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let dataObj = object["data"] as? [String: Any] else {
+            return []
+        }
+
+        // 找到第一个股票代码对应的数据
+        for (_, value) in dataObj {
+            guard let stockObj = value as? [String: Any] else { continue }
+            // 尝试 "day" 或 "qfqday" (前复权)
+            let klines = (stockObj["day"] as? [[String]]) ?? (stockObj["qfqday"] as? [[String]]) ?? []
+            return klines.compactMap { parts in
+                guard parts.count >= 3,
+                      let open = Double(parts[1]),
+                      let close = Double(parts[2]) else {
+                    return nil
+                }
+                return HistoricalPricePoint(date: parts[0], open: open, close: close)
+            }
+        }
+
+        return []
+    }
+
+    private static func doubleFromAny(_ value: Any?) -> Double {
+        switch value {
+        case let d as Double: return d
+        case let i as Int: return Double(i)
+        case let s as String: return Double(s) ?? 0
+        default: return 0
+        }
+    }
+
     private static func firstMatch(in text: String, pattern: String) -> String? {
         firstMatchGroups(in: text, pattern: pattern).first
     }

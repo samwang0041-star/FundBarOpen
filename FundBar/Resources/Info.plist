@@ -20,7 +20,5 @@
 	<string>1.0.1</string>
 	<key>CFBundleVersion</key>
 	<string>2</string>
-	<key>FundDataRelayBaseURL</key>
-	<string>https://159.75.170.129</string>
 </dict>
 </plist>
