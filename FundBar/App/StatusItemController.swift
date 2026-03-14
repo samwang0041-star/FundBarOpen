@@ -63,6 +63,13 @@ final class StatusItemController: NSObject {
     private func configurePopover() {
         popover.behavior = .transient
         popover.animates = true
+        popoverHostingController.rootView = AnyView(
+            MenuBarContentView(viewModel: viewModel)
+                .environment(\.colorScheme, .light)
+                .environmentObject(supportPurchaseManager)
+                .environmentObject(updateChecker)
+                .modelContainer(modelContainer)
+        )
         popover.contentViewController = popoverHostingController
         popover.contentViewController?.view.appearance = NSAppearance(named: .aqua)
     }
@@ -136,14 +143,6 @@ final class StatusItemController: NSObject {
     }
 
     private func refreshPopoverContentSize() {
-        popoverHostingController.rootView = AnyView(
-            MenuBarContentView(viewModel: viewModel)
-                .environment(\.colorScheme, .light)
-                .environmentObject(supportPurchaseManager)
-                .environmentObject(updateChecker)
-                .modelContainer(modelContainer)
-        )
-
         let view = popoverHostingController.view
         view.layoutSubtreeIfNeeded()
         let fittingSize = view.fittingSize

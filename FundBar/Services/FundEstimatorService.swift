@@ -364,7 +364,9 @@ actor FundEstimatorService: AssetRefreshing {
 
     private func fetchReportCloses(holdings: [Holding], reportDate: String?) async -> [String: Double] {
         guard let reportDate else { return [:] }
-        if let cached = reportCloseCache[reportDate] {
+        let holdingCodes = holdings.map(\.code).sorted()
+        let cacheKey = reportDate + "|" + holdingCodes.joined(separator: ",")
+        if let cached = reportCloseCache[cacheKey] {
             return cached
         }
 
@@ -393,7 +395,7 @@ actor FundEstimatorService: AssetRefreshing {
             return result
         }
 
-        reportCloseCache[reportDate] = closes
+        reportCloseCache[cacheKey] = closes
         return closes
     }
 
