@@ -41,6 +41,7 @@ enum TestSupport {
         let schema = Schema([
             TrackedFund.self,
             FundSnapshot.self,
+            FundEstimateObservation.self,
             AppPreference.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)

@@ -345,6 +345,7 @@ final class MenuBarViewModel: ObservableObject {
     private func reloadFromStore() throws {
         let trackedAssets = try store.loadTrackedFunds()
         let snapshots = Dictionary(uniqueKeysWithValues: try store.loadSnapshots().map { ($0.fundCode, $0) })
+        let learningSummaries = try store.loadEstimateLearningSummaries()
         let preference = try store.currentPreference()
 
         assets = trackedAssets.map { asset in
@@ -363,7 +364,8 @@ final class MenuBarViewModel: ObservableObject {
                 updatedAt: snapshot?.updatedAt,
                 isStale: snapshot?.isStale ?? false,
                 sourceMode: snapshot?.sourceMode,
-                statusMessage: resolvedStatusMessage(snapshot: snapshot, assetKind: asset.assetKind)
+                statusMessage: resolvedStatusMessage(snapshot: snapshot, assetKind: asset.assetKind),
+                learningSummary: learningSummaries[asset.code]
             )
         }
 

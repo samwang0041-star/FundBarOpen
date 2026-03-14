@@ -33,6 +33,12 @@ struct FundRowView: View {
                         highlighted: asset.statusMessage.contains("官方净值已发布")
                     )
                     .lineLimit(1)
+                    if let diagnostics = estimateDiagnosticsText {
+                        Text(diagnostics)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(FundBarTheme.textSecondary)
+                            .lineLimit(1)
+                    }
                 }
                 Spacer()
 
@@ -159,5 +165,16 @@ struct FundRowView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.white.opacity(0.50))
         )
+    }
+
+    private var estimateDiagnosticsText: String? {
+        guard asset.assetKind == .fund else { return nil }
+        switch asset.sourceMode {
+        case .estimated, .preOpenEstimated, .estimatedClosed:
+            return DisplayFormatting.estimateLearningSummary(for: asset)
+                ?? "模型学习中"
+        case .official, .realtime, nil:
+            return nil
+        }
     }
 }

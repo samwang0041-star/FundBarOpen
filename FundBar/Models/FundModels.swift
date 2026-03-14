@@ -149,6 +149,7 @@ final class FundSnapshot {
     var estimatedProfitAmount: Double = 0
     var lastNav: Double = 0
     var lastNavDate: String = ""
+    var valuationDate: String = ""
     var updatedAt: Date = Date.now
     var lastAttemptAt: Date? = nil
     var isStale: Bool = false
@@ -163,6 +164,7 @@ final class FundSnapshot {
         estimatedProfitAmount: Double,
         lastNav: Double,
         lastNavDate: String,
+        valuationDate: String? = nil,
         updatedAt: Date,
         lastAttemptAt: Date? = nil,
         isStale: Bool,
@@ -176,6 +178,7 @@ final class FundSnapshot {
         self.estimatedProfitAmount = estimatedProfitAmount
         self.lastNav = lastNav
         self.lastNavDate = lastNavDate
+        self.valuationDate = valuationDate ?? lastNavDate
         self.updatedAt = updatedAt
         self.lastAttemptAt = lastAttemptAt ?? updatedAt
         self.isStale = isStale
@@ -194,6 +197,44 @@ final class FundSnapshot {
 
     var displayCode: String {
         AssetIdentity.displayCode(from: fundCode)
+    }
+}
+
+@Model
+final class FundEstimateObservation {
+    var fundCode: String = ""
+    var valuationDate: String = ""
+    var estimatedNav: Double = 0
+    var officialNav: Double = 0
+    var referenceValue: Double = 0
+    var estimatedReturn: Double = 0
+    var officialReturn: Double = 0
+    var returnError: Double = 0
+    var absoluteReturnError: Double = 0
+    var createdAt: Date = Date.now
+
+    init(
+        fundCode: String,
+        valuationDate: String,
+        estimatedNav: Double,
+        officialNav: Double,
+        referenceValue: Double,
+        estimatedReturn: Double,
+        officialReturn: Double,
+        returnError: Double,
+        absoluteReturnError: Double,
+        createdAt: Date = .now
+    ) {
+        self.fundCode = fundCode
+        self.valuationDate = valuationDate
+        self.estimatedNav = estimatedNav
+        self.officialNav = officialNav
+        self.referenceValue = referenceValue
+        self.estimatedReturn = estimatedReturn
+        self.officialReturn = officialReturn
+        self.returnError = returnError
+        self.absoluteReturnError = absoluteReturnError
+        self.createdAt = createdAt
     }
 }
 
@@ -276,9 +317,61 @@ struct FundRefreshPayload: Equatable, Sendable {
     let estimatedProfitAmount: Double
     let referenceValue: Double
     let referenceDate: String
+    let valuationDate: String
     let sourceMode: SnapshotSourceMode
     let statusMessage: String
     let updatedAt: Date
+
+    init(
+        storageCode: String,
+        assetKind: AssetKind,
+        name: String,
+        displayValue: Double,
+        displayChangePct: Double,
+        estimatedProfitAmount: Double,
+        referenceValue: Double,
+        referenceDate: String,
+        valuationDate: String? = nil,
+        sourceMode: SnapshotSourceMode,
+        statusMessage: String,
+        updatedAt: Date
+    ) {
+        self.storageCode = storageCode
+        self.assetKind = assetKind
+        self.name = name
+        self.displayValue = displayValue
+        self.displayChangePct = displayChangePct
+        self.estimatedProfitAmount = estimatedProfitAmount
+        self.referenceValue = referenceValue
+        self.referenceDate = referenceDate
+        self.valuationDate = valuationDate ?? referenceDate
+        self.sourceMode = sourceMode
+        self.statusMessage = statusMessage
+        self.updatedAt = updatedAt
+    }
+}
+
+enum EstimateConfidence: String, Equatable, Sendable {
+    case low
+    case medium
+    case high
+
+    var label: String {
+        switch self {
+        case .low:
+            return "低"
+        case .medium:
+            return "中"
+        case .high:
+            return "高"
+        }
+    }
+}
+
+struct EstimateLearningSummary: Equatable, Sendable {
+    let learningDays: Int
+    let averageAbsoluteErrorPct: Double
+    let confidence: EstimateConfidence
 }
 
 struct FundViewData: Identifiable, Equatable {
@@ -297,6 +390,41 @@ struct FundViewData: Identifiable, Equatable {
     let isStale: Bool
     let sourceMode: SnapshotSourceMode?
     let statusMessage: String
+    let learningSummary: EstimateLearningSummary?
+
+    init(
+        storageCode: String,
+        assetKind: AssetKind,
+        code: String,
+        name: String,
+        shares: Double,
+        isPrimary: Bool,
+        displayValue: Double?,
+        displayChangePct: Double?,
+        estimatedProfitAmount: Double?,
+        referenceDate: String?,
+        updatedAt: Date?,
+        isStale: Bool,
+        sourceMode: SnapshotSourceMode?,
+        statusMessage: String,
+        learningSummary: EstimateLearningSummary? = nil
+    ) {
+        self.storageCode = storageCode
+        self.assetKind = assetKind
+        self.code = code
+        self.name = name
+        self.shares = shares
+        self.isPrimary = isPrimary
+        self.displayValue = displayValue
+        self.displayChangePct = displayChangePct
+        self.estimatedProfitAmount = estimatedProfitAmount
+        self.referenceDate = referenceDate
+        self.updatedAt = updatedAt
+        self.isStale = isStale
+        self.sourceMode = sourceMode
+        self.statusMessage = statusMessage
+        self.learningSummary = learningSummary
+    }
 
     var displayValueTitle: String {
         switch assetKind {

@@ -168,4 +168,153 @@ final class FundStoreTests: XCTestCase {
         XCTAssertEqual(snapshot.lastAttemptAt, attemptedAt)
         XCTAssertTrue(snapshot.isStale)
     }
+
+    @MainActor
+    func testOfficialSnapshotRecordsLocalEstimateObservation() throws {
+        let container = try TestSupport.makeModelContainer()
+        let store = FundStore(modelContext: container.mainContext)
+        _ = try store.upsertTrackedFund(code: "001437", assetKind: .fund, shares: 100, makePrimary: true)
+
+        try store.saveSnapshot(
+            FundRefreshPayload(
+                storageCode: "001437",
+                assetKind: .fund,
+                name: "测试基金",
+                displayValue: 1.0500,
+                displayChangePct: 5.0,
+                estimatedProfitAmount: 5.0,
+                referenceValue: 1.0000,
+                referenceDate: "2026-03-13",
+                valuationDate: "2026-03-14",
+                sourceMode: .estimated,
+                statusMessage: "本地参考估算",
+                updatedAt: Date(timeIntervalSince1970: 100)
+            ),
+            shares: 100
+        )
+        try store.saveSnapshot(
+            FundRefreshPayload(
+                storageCode: "001437",
+                assetKind: .fund,
+                name: "测试基金",
+                displayValue: 1.0200,
+                displayChangePct: 2.0,
+                estimatedProfitAmount: 2.0,
+                referenceValue: 1.0000,
+                referenceDate: "2026-03-14",
+                valuationDate: "2026-03-14",
+                sourceMode: .official,
+                statusMessage: "官方净值已发布",
+                updatedAt: Date(timeIntervalSince1970: 200)
+            ),
+            shares: 100
+        )
+
+        let observations = try store.loadEstimateObservations(for: "001437")
+        let observation = try XCTUnwrap(observations.first)
+
+        XCTAssertEqual(observations.count, 1)
+        XCTAssertEqual(observation.valuationDate, "2026-03-14")
+        XCTAssertEqual(observation.estimatedNav, 1.05, accuracy: 0.0001)
+        XCTAssertEqual(observation.officialNav, 1.02, accuracy: 0.0001)
+        XCTAssertEqual(observation.returnError, 0.03, accuracy: 0.0001)
+    }
+
+    @MainActor
+    func testEstimatedSnapshotAppliesRollingBiasCorrectionFromObservationHistory() throws {
+        let container = try TestSupport.makeModelContainer()
+        let store = FundStore(modelContext: container.mainContext)
+        _ = try store.upsertTrackedFund(code: "001437", assetKind: .fund, shares: 100, makePrimary: true)
+
+        for day in 14...21 {
+            let valuationDate = "2026-03-\(String(format: "%02d", day))"
+            try store.saveSnapshot(
+                FundRefreshPayload(
+                    storageCode: "001437",
+                    assetKind: .fund,
+                    name: "测试基金",
+                    displayValue: 1.0500,
+                    displayChangePct: 5.0,
+                    estimatedProfitAmount: 5.0,
+                    referenceValue: 1.0000,
+                    referenceDate: "2026-03-13",
+                    valuationDate: valuationDate,
+                    sourceMode: .estimated,
+                    statusMessage: "本地参考估算",
+                    updatedAt: Date(timeIntervalSince1970: TimeInterval(day))
+                ),
+                shares: 100
+            )
+            try store.saveSnapshot(
+                FundRefreshPayload(
+                    storageCode: "001437",
+                    assetKind: .fund,
+                    name: "测试基金",
+                    displayValue: 1.0200,
+                    displayChangePct: 2.0,
+                    estimatedProfitAmount: 2.0,
+                    referenceValue: 1.0000,
+                    referenceDate: valuationDate,
+                    valuationDate: valuationDate,
+                    sourceMode: .official,
+                    statusMessage: "官方净值已发布",
+                    updatedAt: Date(timeIntervalSince1970: TimeInterval(day) + 0.5)
+                ),
+                shares: 100
+            )
+        }
+
+        try store.saveSnapshot(
+            FundRefreshPayload(
+                storageCode: "001437",
+                assetKind: .fund,
+                name: "测试基金",
+                displayValue: 1.0500,
+                displayChangePct: 5.0,
+                estimatedProfitAmount: 5.0,
+                referenceValue: 1.0000,
+                referenceDate: "2026-03-21",
+                valuationDate: "2026-03-24",
+                sourceMode: .estimated,
+                statusMessage: "本地参考估算",
+                updatedAt: Date(timeIntervalSince1970: 300)
+            ),
+            shares: 100
+        )
+
+        let correctedSnapshot = try XCTUnwrap(store.snapshot(for: "001437"))
+        XCTAssertLessThan(correctedSnapshot.estimatedNav, 1.04)
+        XCTAssertGreaterThan(correctedSnapshot.estimatedNav, 1.02)
+        XCTAssertLessThan(correctedSnapshot.estimatedChangePct, 5.0)
+    }
+
+    @MainActor
+    func testLoadEstimateLearningSummariesBuildsConfidenceMetrics() throws {
+        let container = try TestSupport.makeModelContainer()
+        let context = container.mainContext
+        for index in 0..<10 {
+            context.insert(
+                FundEstimateObservation(
+                    fundCode: "001437",
+                    valuationDate: "2026-03-\(String(format: "%02d", index + 1))",
+                    estimatedNav: 1.0,
+                    officialNav: 0.998,
+                    referenceValue: 1.0,
+                    estimatedReturn: 0,
+                    officialReturn: -0.002,
+                    returnError: 0.002,
+                    absoluteReturnError: 0.002,
+                    createdAt: Date(timeIntervalSince1970: TimeInterval(index))
+                )
+            )
+        }
+        try context.save()
+
+        let store = FundStore(modelContext: context)
+        let summary = try XCTUnwrap(store.loadEstimateLearningSummaries()["001437"])
+
+        XCTAssertEqual(summary.learningDays, 10)
+        XCTAssertEqual(summary.averageAbsoluteErrorPct, 0.2, accuracy: 0.0001)
+        XCTAssertEqual(summary.confidence, .high)
+    }
 }

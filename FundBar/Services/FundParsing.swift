@@ -18,6 +18,17 @@ enum FundParsingError: Error, LocalizedError {
 }
 
 enum FundParsing {
+    struct NavPoint: Equatable, Sendable {
+        let date: String
+        let nav: Double
+    }
+
+    struct HistoricalPricePoint: Equatable, Sendable {
+        let date: String
+        let open: Double
+        let close: Double
+    }
+
     static func extractVariableBlock(from raw: String, variableName: String) -> String? {
         let marker = "var \(variableName)"
         guard let start = raw.range(of: marker)?.lowerBound else {
@@ -65,7 +76,7 @@ enum FundParsing {
         let previousDate: String
     }
 
-    static func parseNavTrend(from pingData: String, calendar: MarketCalendar) throws -> NavTrendResult {
+    static func parseNavSeries(from pingData: String, calendar: MarketCalendar) throws -> [NavPoint] {
         guard let block = extractVariableBlock(from: pingData, variableName: "Data_netWorthTrend") else {
             throw FundParsingError.missingContent("缺少净值走势数据。")
         }
@@ -79,30 +90,31 @@ enum FundParsing {
             throw FundParsingError.invalidJSON("净值走势数据不足。")
         }
 
-        let latest = items[items.count - 1]
-        guard let latestNav = latest["y"] as? Double,
-              let latestTs = latest["x"] as? Double else {
+        let points = items.compactMap { item -> NavPoint? in
+            guard let nav = item["y"] as? Double,
+                  let timestamp = item["x"] as? Double else {
+                return nil
+            }
+            return NavPoint(date: calendar.formatDate(fromUnixMilliseconds: timestamp), nav: nav)
+        }
+
+        guard !points.isEmpty else {
             throw FundParsingError.invalidJSON("净值走势数据格式无效。")
         }
 
-        let prevNav: Double
-        let prevTs: Double
-        if items.count >= 2,
-           let pNav = items[items.count - 2]["y"] as? Double,
-           let pTs = items[items.count - 2]["x"] as? Double {
-            prevNav = pNav
-            prevTs = pTs
-        } else {
-            // 仅一个数据点时（新基金或测试 fixture），用同一个点兜底
-            prevNav = latestNav
-            prevTs = latestTs
-        }
+        return points
+    }
+
+    static func parseNavTrend(from pingData: String, calendar: MarketCalendar) throws -> NavTrendResult {
+        let points = try parseNavSeries(from: pingData, calendar: calendar)
+        let latest = points[points.count - 1]
+        let previous = points.count >= 2 ? points[points.count - 2] : latest
 
         return NavTrendResult(
-            latestNav: latestNav,
-            latestDate: calendar.formatDate(fromUnixMilliseconds: latestTs),
-            previousNav: prevNav,
-            previousDate: calendar.formatDate(fromUnixMilliseconds: prevTs)
+            latestNav: latest.nav,
+            latestDate: latest.date,
+            previousNav: previous.nav,
+            previousDate: previous.date
         )
     }
 
@@ -259,19 +271,34 @@ enum FundParsing {
     }
 
     static func parseHistoricalClose(from jsonp: String) throws -> Double? {
+        try parseHistoricalSeries(from: jsonp).first?.close
+    }
+
+    static func parseHistoricalSeries(from jsonp: String) throws -> [HistoricalPricePoint] {
         let json = stripJSONP(jsonp)
         guard let data = json.data(using: .utf8) else {
             throw FundParsingError.invalidJSON("历史收盘价编码无效。")
         }
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let payload = object["data"] as? [String: Any],
-              let klines = payload["klines"] as? [String],
-              let first = klines.first else {
-            return nil
+              let klines = payload["klines"] as? [String] else {
+            return []
         }
-        let parts = first.split(separator: ",")
-        guard parts.count > 1 else { return nil }
-        return Double(parts[1])
+
+        return klines.compactMap { line in
+            let parts = line.split(separator: ",")
+            guard parts.count > 2,
+                  let open = Double(parts[1]),
+                  let close = Double(parts[2]) else {
+                return nil
+            }
+
+            return HistoricalPricePoint(
+                date: String(parts[0]),
+                open: open,
+                close: close
+            )
+        }
     }
 
     static func stripJSONP(_ raw: String) -> String {

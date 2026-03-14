@@ -199,4 +199,33 @@ final class DisplayFormattingTests: XCTestCase {
         XCTAssertEqual(officialFund.displayValueTitle, "官方净值")
         XCTAssertEqual(estimatedFund.displayValueTitle, "参考估值")
     }
+
+    func testEstimateLearningSummaryUsesReadableDiagnosticsCopy() {
+        let fund = FundViewData(
+            storageCode: "001437",
+            assetKind: .fund,
+            code: "001437",
+            name: "测试基金",
+            shares: 100,
+            isPrimary: true,
+            displayValue: 1.2345,
+            displayChangePct: 2.56,
+            estimatedProfitAmount: 345.67,
+            referenceDate: "2026-03-13",
+            updatedAt: Date(timeIntervalSince1970: 0),
+            isStale: false,
+            sourceMode: .estimated,
+            statusMessage: "本地参考估算",
+            learningSummary: EstimateLearningSummary(
+                learningDays: 12,
+                averageAbsoluteErrorPct: 0.18,
+                confidence: .high
+            )
+        )
+
+        XCTAssertEqual(
+            DisplayFormatting.estimateLearningSummary(for: fund),
+            "模型已学习 12 天，近期平均误差 0.18%，置信度高"
+        )
+    }
 }

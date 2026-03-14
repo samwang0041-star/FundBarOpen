@@ -12,6 +12,7 @@ struct AppPersistence {
         let schema = Schema([
             TrackedFund.self,
             FundSnapshot.self,
+            FundEstimateObservation.self,
             AppPreference.self
         ])
 

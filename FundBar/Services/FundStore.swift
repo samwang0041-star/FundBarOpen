@@ -34,6 +34,7 @@ enum FundStoreLimits {
 @MainActor
 final class FundStore {
     static let maximumTrackedFunds = FundStoreLimits.maximumTrackedFunds
+    private static let maximumStoredObservationsPerFund = 60
 
     private let context: ModelContext
 
@@ -66,6 +67,47 @@ final class FundStore {
 
     func snapshot(for code: String) throws -> FundSnapshot? {
         try loadSnapshots().first(where: { $0.fundCode == code })
+    }
+
+    func loadEstimateObservations(for storageCode: String) throws -> [FundEstimateObservation] {
+        let observations = try context.fetch(FetchDescriptor<FundEstimateObservation>())
+        return observations
+            .filter { $0.fundCode == storageCode }
+            .sorted { lhs, rhs in
+                if lhs.valuationDate != rhs.valuationDate {
+                    return lhs.valuationDate > rhs.valuationDate
+                }
+                return lhs.createdAt > rhs.createdAt
+            }
+    }
+
+    func loadEstimateLearningSummaries() throws -> [String: EstimateLearningSummary] {
+        let observations = try context.fetch(FetchDescriptor<FundEstimateObservation>())
+        let grouped = Dictionary(grouping: observations, by: \.fundCode)
+
+        return grouped.reduce(into: [:]) { partialResult, element in
+            let ordered = element.value.sorted { lhs, rhs in
+                if lhs.valuationDate != rhs.valuationDate {
+                    return lhs.valuationDate > rhs.valuationDate
+                }
+                return lhs.createdAt > rhs.createdAt
+            }
+            let recent = Array(ordered.prefix(15))
+            guard !recent.isEmpty else { return }
+
+            let averageAbsoluteErrorPct = recent.reduce(0.0) { partialResult, observation in
+                partialResult + observation.absoluteReturnError * 100
+            } / Double(recent.count)
+
+            partialResult[element.key] = EstimateLearningSummary(
+                learningDays: recent.count,
+                averageAbsoluteErrorPct: rounded(averageAbsoluteErrorPct, scale: 2),
+                confidence: estimateConfidence(
+                    sampleCount: recent.count,
+                    averageAbsoluteErrorPct: averageAbsoluteErrorPct
+                )
+            )
+        }
     }
 
     func upsertTrackedFund(code rawCode: String, assetKind: AssetKind, shares: Double, makePrimary: Bool) throws -> TrackedFund {
@@ -103,6 +145,11 @@ final class FundStore {
                 if let existingSnapshot = try snapshot(for: originalStorageCode) {
                     existingSnapshot.fundCode = storageCode
                 }
+                try migrateObservations(
+                    from: originalStorageCode,
+                    to: storageCode,
+                    keepsKind: AssetIdentity.kind(from: originalStorageCode) == assetKind
+                )
             }
 
             existing.shares = shares
@@ -154,6 +201,7 @@ final class FundStore {
         if let orphanedSnapshot = try snapshot(for: storageCode) {
             context.delete(orphanedSnapshot)
         }
+        try deleteObservations(for: storageCode)
 
         if wasPrimary {
             let remaining = try loadTrackedFunds().filter { $0.code != storageCode }
@@ -175,38 +223,49 @@ final class FundStore {
     }
 
     func saveSnapshot(_ payload: FundRefreshPayload, shares: Double) throws {
-        let snapshot = try snapshot(for: payload.storageCode) ?? {
+        let existingSnapshot = try snapshot(for: payload.storageCode)
+        let adjustedPayload = try applyRollingBiasCorrection(to: payload, shares: shares)
+
+        if adjustedPayload.assetKind == .fund,
+           adjustedPayload.sourceMode == .official,
+           let existingSnapshot {
+            try recordOfficialOutcomeIfNeeded(previousSnapshot: existingSnapshot, officialPayload: adjustedPayload)
+        }
+
+        let snapshot = existingSnapshot ?? {
             let created = FundSnapshot(
-                fundCode: payload.storageCode,
-                name: payload.name,
-                estimatedNav: payload.displayValue,
-                estimatedChangePct: payload.displayChangePct,
-                estimatedProfitAmount: payload.estimatedProfitAmount,
-                lastNav: payload.referenceValue,
-                lastNavDate: payload.referenceDate,
-                updatedAt: payload.updatedAt,
+                fundCode: adjustedPayload.storageCode,
+                name: adjustedPayload.name,
+                estimatedNav: adjustedPayload.displayValue,
+                estimatedChangePct: adjustedPayload.displayChangePct,
+                estimatedProfitAmount: adjustedPayload.estimatedProfitAmount,
+                lastNav: adjustedPayload.referenceValue,
+                lastNavDate: adjustedPayload.referenceDate,
+                valuationDate: adjustedPayload.valuationDate,
+                updatedAt: adjustedPayload.updatedAt,
                 isStale: false,
-                sourceMode: payload.sourceMode,
-                statusMessage: payload.statusMessage
+                sourceMode: adjustedPayload.sourceMode,
+                statusMessage: adjustedPayload.statusMessage
             )
             context.insert(created)
             return created
         }()
 
-        snapshot.name = payload.name
-        snapshot.estimatedNav = payload.displayValue
-        snapshot.estimatedChangePct = payload.displayChangePct
-        snapshot.estimatedProfitAmount = payload.estimatedProfitAmount
-        snapshot.lastNav = payload.referenceValue
-        snapshot.lastNavDate = payload.referenceDate
-        snapshot.updatedAt = payload.updatedAt
-        snapshot.lastAttemptAt = payload.updatedAt
+        snapshot.name = adjustedPayload.name
+        snapshot.estimatedNav = adjustedPayload.displayValue
+        snapshot.estimatedChangePct = adjustedPayload.displayChangePct
+        snapshot.estimatedProfitAmount = adjustedPayload.estimatedProfitAmount
+        snapshot.lastNav = adjustedPayload.referenceValue
+        snapshot.lastNavDate = adjustedPayload.referenceDate
+        snapshot.valuationDate = adjustedPayload.valuationDate
+        snapshot.updatedAt = adjustedPayload.updatedAt
+        snapshot.lastAttemptAt = adjustedPayload.updatedAt
         snapshot.isStale = false
-        snapshot.sourceMode = payload.sourceMode
-        snapshot.statusMessage = payload.statusMessage
+        snapshot.sourceMode = adjustedPayload.sourceMode
+        snapshot.statusMessage = adjustedPayload.statusMessage
 
         // 仅同步份额，不更新 updatedAt 以保留「用户最后编辑时间」排序语义
-        if let trackedFund = try loadTrackedFunds().first(where: { $0.code == payload.storageCode }),
+        if let trackedFund = try loadTrackedFunds().first(where: { $0.code == adjustedPayload.storageCode }),
            trackedFund.shares != shares {
             trackedFund.shares = shares
             trackedFund.updatedAt = .now
@@ -252,6 +311,172 @@ final class FundStore {
         if context.hasChanges {
             try context.save()
         }
+    }
+
+    private func rounded(_ value: Double, scale: Int) -> Double {
+        let divisor = pow(10.0, Double(scale))
+        return (value * divisor).rounded() / divisor
+    }
+
+    private func applyRollingBiasCorrection(to payload: FundRefreshPayload, shares: Double) throws -> FundRefreshPayload {
+        guard payload.assetKind == .fund,
+              payload.sourceMode != .official,
+              payload.referenceValue > 0 else {
+            return payload
+        }
+
+        let bias = try rollingBias(for: payload.storageCode)
+        guard bias.sampleCount > 0, abs(bias.biasReturn) > 0.000_01 else {
+            return payload
+        }
+
+        let sampleConfidence = min(Double(bias.sampleCount) / 8, 1)
+        let consistency = min(abs(bias.biasReturn) / max(bias.absoluteReturnError, abs(bias.biasReturn)), 1)
+        let appliedBias = bias.biasReturn * sampleConfidence * consistency * 0.8
+        guard abs(appliedBias) > 0.000_01 else {
+            return payload
+        }
+
+        let rawReturn = payload.displayValue / payload.referenceValue - 1
+        let correctedReturn = rawReturn - appliedBias
+        let correctedNav = rounded(max(payload.referenceValue * (1 + correctedReturn), 0.0001), scale: 4)
+        let correctedChangePct = rounded((correctedNav / payload.referenceValue - 1) * 100, scale: 2)
+        let correctedProfit = rounded((correctedNav - payload.referenceValue) * shares, scale: 2)
+
+        return FundRefreshPayload(
+            storageCode: payload.storageCode,
+            assetKind: payload.assetKind,
+            name: payload.name,
+            displayValue: correctedNav,
+            displayChangePct: correctedChangePct,
+            estimatedProfitAmount: correctedProfit,
+            referenceValue: payload.referenceValue,
+            referenceDate: payload.referenceDate,
+            valuationDate: payload.valuationDate,
+            sourceMode: payload.sourceMode,
+            statusMessage: payload.statusMessage,
+            updatedAt: payload.updatedAt
+        )
+    }
+
+    private func recordOfficialOutcomeIfNeeded(previousSnapshot: FundSnapshot, officialPayload: FundRefreshPayload) throws {
+        guard previousSnapshot.sourceMode != .official,
+              previousSnapshot.valuationDate == officialPayload.valuationDate,
+              previousSnapshot.lastNav > 0,
+              officialPayload.referenceValue > 0 else {
+            return
+        }
+
+        let estimatedReturn = previousSnapshot.estimatedNav / previousSnapshot.lastNav - 1
+        let officialReturn = officialPayload.displayValue / officialPayload.referenceValue - 1
+        let returnError = estimatedReturn - officialReturn
+        let absoluteReturnError = abs(returnError)
+
+        let observation = try existingObservation(
+            for: officialPayload.storageCode,
+            valuationDate: officialPayload.valuationDate
+        ) ?? {
+            let created = FundEstimateObservation(
+                fundCode: officialPayload.storageCode,
+                valuationDate: officialPayload.valuationDate,
+                estimatedNav: previousSnapshot.estimatedNav,
+                officialNav: officialPayload.displayValue,
+                referenceValue: officialPayload.referenceValue,
+                estimatedReturn: estimatedReturn,
+                officialReturn: officialReturn,
+                returnError: returnError,
+                absoluteReturnError: absoluteReturnError,
+                createdAt: officialPayload.updatedAt
+            )
+            context.insert(created)
+            return created
+        }()
+
+        observation.fundCode = officialPayload.storageCode
+        observation.valuationDate = officialPayload.valuationDate
+        observation.estimatedNav = previousSnapshot.estimatedNav
+        observation.officialNav = officialPayload.displayValue
+        observation.referenceValue = officialPayload.referenceValue
+        observation.estimatedReturn = estimatedReturn
+        observation.officialReturn = officialReturn
+        observation.returnError = returnError
+        observation.absoluteReturnError = absoluteReturnError
+        observation.createdAt = officialPayload.updatedAt
+
+        try trimObservationHistory(for: officialPayload.storageCode)
+    }
+
+    private func rollingBias(for storageCode: String) throws -> (biasReturn: Double, absoluteReturnError: Double, sampleCount: Int) {
+        let observations = try loadEstimateObservations(for: storageCode)
+        guard !observations.isEmpty else {
+            return (0, 0, 0)
+        }
+
+        let limited = Array(observations.prefix(20))
+        var weightedBias = 0.0
+        var weightedAbsolute = 0.0
+        var totalWeight = 0.0
+
+        for (index, observation) in limited.enumerated() {
+            let weight = pow(0.85, Double(index))
+            totalWeight += weight
+            weightedBias += observation.returnError * weight
+            weightedAbsolute += observation.absoluteReturnError * weight
+        }
+
+        guard totalWeight > 0 else {
+            return (0, 0, 0)
+        }
+
+        return (
+            biasReturn: weightedBias / totalWeight,
+            absoluteReturnError: weightedAbsolute / totalWeight,
+            sampleCount: limited.count
+        )
+    }
+
+    private func existingObservation(for storageCode: String, valuationDate: String) throws -> FundEstimateObservation? {
+        try loadEstimateObservations(for: storageCode).first {
+            $0.valuationDate == valuationDate
+        }
+    }
+
+    private func migrateObservations(from originalStorageCode: String, to storageCode: String, keepsKind: Bool) throws {
+        let observations = try loadEstimateObservations(for: originalStorageCode)
+        for observation in observations {
+            if keepsKind {
+                observation.fundCode = storageCode
+            } else {
+                context.delete(observation)
+            }
+        }
+    }
+
+    private func deleteObservations(for storageCode: String) throws {
+        for observation in try loadEstimateObservations(for: storageCode) {
+            context.delete(observation)
+        }
+    }
+
+    private func trimObservationHistory(for storageCode: String) throws {
+        let observations = try loadEstimateObservations(for: storageCode)
+        guard observations.count > Self.maximumStoredObservationsPerFund else {
+            return
+        }
+
+        for observation in observations.dropFirst(Self.maximumStoredObservationsPerFund) {
+            context.delete(observation)
+        }
+    }
+
+    private func estimateConfidence(sampleCount: Int, averageAbsoluteErrorPct: Double) -> EstimateConfidence {
+        if sampleCount >= 10, averageAbsoluteErrorPct <= 0.35 {
+            return .high
+        }
+        if sampleCount >= 5, averageAbsoluteErrorPct <= 0.8 {
+            return .medium
+        }
+        return .low
     }
 
     private static func validateShares(_ shares: Double, for assetKind: AssetKind) throws {

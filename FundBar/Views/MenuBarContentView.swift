@@ -201,10 +201,11 @@ struct MenuBarContentView: View {
                         .foregroundStyle(FundBarTheme.textPrimary.opacity(0.84))
                         .lineLimit(1)
                     statusMessageView(fund.statusMessage)
-                    if shouldShowLocalEstimateBasis(for: fund) {
-                        Text("按最近披露持仓自动计算")
+                    if let diagnostics = estimateDiagnosticsText(for: fund) {
+                        Text(diagnostics)
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(FundBarTheme.textSecondary)
+                            .lineLimit(2)
                     }
                 }
                 Spacer()
@@ -794,6 +795,12 @@ struct MenuBarContentView: View {
         case .official, .realtime, nil:
             return false
         }
+    }
+
+    private func estimateDiagnosticsText(for fund: FundViewData) -> String? {
+        guard shouldShowLocalEstimateBasis(for: fund) else { return nil }
+        return DisplayFormatting.estimateLearningSummary(for: fund)
+            ?? "模型学习中，先按最近披露持仓自动计算"
     }
 
     private var updateBanner: some View {

@@ -29,6 +29,17 @@ final class FundParsingTests: XCTestCase {
         XCTAssertEqual(metadata.holdingsReportDate, "2025-12-31")
     }
 
+    func testParseNavSeriesFromFixtures() throws {
+        let pingData = try TestSupport.fixtureString(named: "pingzhongdata_fixture", extension: "js")
+
+        let navSeries = try FundParsing.parseNavSeries(from: pingData, calendar: calendar)
+        let latest = try XCTUnwrap(navSeries.last)
+
+        XCTAssertEqual(navSeries.count, 1)
+        XCTAssertEqual(latest.date, "2026-03-11")
+        XCTAssertEqual(latest.nav, 7.8421, accuracy: 0.0001)
+    }
+
     func testParseHoldingsQuotesAndHistoricalClose() throws {
         let holdingsRaw = try TestSupport.fixtureString(named: "holdings_fixture", extension: "txt")
         let quotesRaw = try TestSupport.fixtureString(named: "quotes_fixture", extension: "jsonp")
@@ -49,5 +60,17 @@ final class FundParsingTests: XCTestCase {
         XCTAssertEqual(stockQuote.price, 100.4965, accuracy: 0.0001)
         XCTAssertEqual(indexQuote.changePct, -0.39, accuracy: 0.0001)
         XCTAssertEqual(close, 100.0, accuracy: 0.0001)
+    }
+
+    func testParseHistoricalCloseUsesCloseField() throws {
+        let raw = #"cb({"data":{"klines":["2025-12-31,100.00,102.50"]}})"#
+
+        let close = try XCTUnwrap(FundParsing.parseHistoricalClose(from: raw))
+        let series = try FundParsing.parseHistoricalSeries(from: raw)
+        let first = try XCTUnwrap(series.first)
+
+        XCTAssertEqual(close, 102.5, accuracy: 0.0001)
+        XCTAssertEqual(first.open, 100.0, accuracy: 0.0001)
+        XCTAssertEqual(first.close, 102.5, accuracy: 0.0001)
     }
 }

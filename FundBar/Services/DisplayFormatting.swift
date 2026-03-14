@@ -213,6 +213,16 @@ enum DisplayFormatting {
         return monthDayFormatter.string(from: date)
     }
 
+    static func estimateLearningSummary(for fund: FundViewData) -> String? {
+        guard fund.assetKind == .fund,
+              let summary = fund.learningSummary,
+              summary.learningDays > 0 else {
+            return nil
+        }
+
+        return "模型已学习 \(summary.learningDays) 天，近期平均误差 \(trimmedNumber(summary.averageAbsoluteErrorPct, maximumFractionDigits: 2))%，置信度\(summary.confidence.label)"
+    }
+
     private static func shouldUseDatedProfitTitle(for fund: FundViewData) -> Bool {
         switch fund.sourceMode {
         case .official, .estimatedClosed:
