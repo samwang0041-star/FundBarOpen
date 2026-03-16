@@ -16,6 +16,7 @@ final class StatusItemController: NSObject {
 
     private var cancellables: Set<AnyCancellable> = []
     private var layoutRefreshTask: Task<Void, Never>?
+    private var lastAppliedColorScheme: AppColorSchemePreference?
 
     init(viewModel: MenuBarViewModel, modelContainer: ModelContainer, supportPurchaseManager: SupportPurchaseManager, updateChecker: GitHubUpdateChecker) {
         self.viewModel = viewModel
@@ -63,15 +64,39 @@ final class StatusItemController: NSObject {
     private func configurePopover() {
         popover.behavior = .transient
         popover.animates = true
-        popoverHostingController.rootView = AnyView(
-            MenuBarContentView(viewModel: viewModel)
-                .environment(\.colorScheme, .light)
-                .environmentObject(supportPurchaseManager)
-                .environmentObject(updateChecker)
-                .modelContainer(modelContainer)
-        )
+        updatePopoverColorScheme()
         popover.contentViewController = popoverHostingController
-        popover.contentViewController?.view.appearance = NSAppearance(named: .aqua)
+    }
+
+    private func updatePopoverColorScheme() {
+        let preference = viewModel.colorSchemePreference
+        let colorScheme: ColorScheme? = {
+            switch preference {
+            case .light: return .light
+            case .dark: return .dark
+            case .system: return nil
+            }
+        }()
+
+        let content = MenuBarContentView(viewModel: viewModel)
+            .environmentObject(supportPurchaseManager)
+            .environmentObject(updateChecker)
+            .modelContainer(modelContainer)
+
+        if let colorScheme {
+            popoverHostingController.rootView = AnyView(content.environment(\.colorScheme, colorScheme))
+        } else {
+            popoverHostingController.rootView = AnyView(content)
+        }
+
+        switch preference {
+        case .light:
+            popover.contentViewController?.view.appearance = NSAppearance(named: .aqua)
+        case .dark:
+            popover.contentViewController?.view.appearance = NSAppearance(named: .darkAqua)
+        case .system:
+            popover.contentViewController?.view.appearance = nil
+        }
     }
 
     private func observeViewModel() {
@@ -118,6 +143,10 @@ final class StatusItemController: NSObject {
         layoutRefreshTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 20_000_000)
             guard let self else { return }
+            if self.lastAppliedColorScheme != self.viewModel.colorSchemePreference {
+                self.lastAppliedColorScheme = self.viewModel.colorSchemePreference
+                self.updatePopoverColorScheme()
+            }
             self.refreshStatusLabel()
             self.refreshStatusItemLayout()
             self.refreshPopoverContentSize()

@@ -134,20 +134,8 @@ struct FundRowView: View {
         }
     }
 
-    @ViewBuilder
     private func sourceModeTag(_ mode: SnapshotSourceMode?) -> some View {
-        switch mode {
-        case .realtime:
-            FundBarTag(text: "实时", tone: FundBarTheme.negative)
-        case .estimated:
-            FundBarTag(text: "本地估算", tone: FundBarTheme.stale)
-        case .preOpenEstimated:
-            FundBarTag(text: "盘前估算", tone: FundBarTheme.accent)
-        case .estimatedClosed:
-            FundBarTag(text: "本地参考", tone: FundBarTheme.textSecondary)
-        case .official, nil:
-            EmptyView()
-        }
+        FundBarSourceModeTag(mode: mode)
     }
 
     private func infoPill(title: String, value: String) -> some View {

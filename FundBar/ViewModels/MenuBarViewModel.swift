@@ -24,6 +24,8 @@ final class MenuBarViewModel: ObservableObject {
     @Published private(set) var lastRefreshAt: Date?
     @Published private(set) var statusBarPulseToken = 0
     @Published private(set) var launchAtLoginEnabled: Bool
+    @Published private(set) var colorSchemePreference: AppColorSchemePreference = .light
+    @Published private(set) var statusBarDisplayMode: StatusBarDisplayMode = .percentAndAmount
     @Published var editorState: FundEditorState?
     @Published var pendingDeleteCode: String?
     @Published var isManagingAssets = false
@@ -109,6 +111,8 @@ final class MenuBarViewModel: ObservableObject {
     private let cloudKitStatusProvider: any CloudKitStatusProviding
     private let launchAtLoginController: any LaunchAtLoginControlling
     private var defaultSyncStatusMessage: String
+    private var consecutiveFailures: [String: Int] = [:]
+    private var refreshCycleCount = 0
     private var didStart = false
 
     init(
@@ -159,6 +163,10 @@ final class MenuBarViewModel: ObservableObject {
         isRefreshing = true
         defer { isRefreshing = false }
         errorMessage = nil
+        refreshCycleCount += 1
+        if manual {
+            consecutiveFailures.removeAll()
+        }
 
         do {
             let trackedAssets = try store.loadTrackedFunds()
@@ -178,14 +186,24 @@ final class MenuBarViewModel: ObservableObject {
             let primaryStorageCode = trackedAssets.first(where: \.isPrimary)?.code
             var didRefreshPrimary = false
             for asset in trackedAssets {
+                // Exponential backoff: skip if not yet due
+                if !manual, let failCount = consecutiveFailures[asset.code], failCount > 0 {
+                    let backoffCycles = 1 << min(failCount, 5) // 2, 4, 8, 16, 32
+                    if refreshCycleCount % backoffCycles != 0 {
+                        continue
+                    }
+                }
+
                 let existingSnapshot = try store.snapshot(for: asset.code)
                 do {
                     let payload = try await estimator.refreshAsset(storageCode: asset.code, shares: asset.shares, hasExistingSnapshot: existingSnapshot != nil)
                     try store.saveSnapshot(payload, shares: asset.shares)
+                    consecutiveFailures[asset.code] = nil
                     if asset.code == primaryStorageCode {
                         didRefreshPrimary = true
                     }
                 } catch {
+                    consecutiveFailures[asset.code, default: 0] += 1
                     failures.append("\(asset.displayCode)：\(error.localizedDescription)")
                     try store.markSnapshotStale(
                         for: asset.code,
@@ -269,6 +287,15 @@ final class MenuBarViewModel: ObservableObject {
         }
     }
 
+    func moveAssets(fromOffsets source: IndexSet, toOffset destination: Int) {
+        do {
+            try store.moveAssets(fromOffsets: source, toOffset: destination)
+            try reloadFromStore()
+        } catch {
+            showError(error.localizedDescription)
+        }
+    }
+
     func confirmDelete() {
         guard let storageCode = pendingDeleteCode else { return }
         pendingDeleteCode = nil
@@ -309,6 +336,30 @@ final class MenuBarViewModel: ObservableObject {
         } catch {
             launchAtLoginEnabled = launchAtLoginController.isEnabled
             showError("开机启动设置失败：\(error.localizedDescription)")
+        }
+    }
+
+    func setColorScheme(_ preference: AppColorSchemePreference) {
+        do {
+            if let pref = try store.currentPreference() {
+                pref.colorSchemePreference = preference
+                try store.saveContext()
+            }
+            colorSchemePreference = preference
+        } catch {
+            showError(error.localizedDescription)
+        }
+    }
+
+    func setStatusBarDisplayMode(_ mode: StatusBarDisplayMode) {
+        do {
+            if let pref = try store.currentPreference() {
+                pref.statusBarDisplayMode = mode
+                try store.saveContext()
+            }
+            statusBarDisplayMode = mode
+        } catch {
+            showError(error.localizedDescription)
         }
     }
 
@@ -375,6 +426,8 @@ final class MenuBarViewModel: ObservableObject {
         if let preference {
             syncMode = preference.syncMode
             syncStatusMessage = preference.syncStatusMessage
+            colorSchemePreference = preference.colorSchemePreference
+            statusBarDisplayMode = preference.statusBarDisplayMode
         }
     }
 

@@ -13,17 +13,48 @@ struct MenuBarContentView: View {
     private let panelWidth: CGFloat = 500
     private let authorEmail = "samwang0041@gmail.com"
 
+    /// 屏幕可用最大高度（留出菜单栏 + 底部 Dock 安全边距）
+    private var screenMaxHeight: CGFloat {
+        let screen = NSScreen.main?.visibleFrame.height ?? 900
+        return screen - 20
+    }
+
     private var panelHeight: CGFloat {
-        let base: CGFloat = 210 // header + controls
-        let primaryHeight: CGFloat = viewModel.primaryAsset != nil ? 190 : 80
+        let base: CGFloat = 210 // header + controls + spacing
+        let primaryHeight: CGFloat = viewModel.primaryAsset != nil ? primaryCardEstimatedHeight : 80
         let editorHeight: CGFloat = viewModel.editorState != nil ? 340 : 0
-        let assetRowHeight: CGFloat = viewModel.isManagingAssets ? 178 : 140
-        let assetListHeight: CGFloat = CGFloat(viewModel.assets.count) * assetRowHeight
+        let assetListHeight: CGFloat = estimatedAssetListHeight
         let errorHeight: CGFloat = viewModel.errorMessage != nil ? 50 : 0
         let deletePromptHeight: CGFloat = viewModel.pendingDeleteCode != nil ? 94 : 0
         let totalProfitHeight: CGFloat = viewModel.assets.count > 1 ? 40 : 0
-        let computed = base + primaryHeight + editorHeight + min(assetListHeight, 600) + errorHeight + deletePromptHeight + totalProfitHeight
-        return min(max(computed, 400), 980)
+        let computed = base + primaryHeight + editorHeight + assetListHeight + errorHeight + deletePromptHeight + totalProfitHeight
+        return min(max(computed, 400), screenMaxHeight)
+    }
+
+    /// 主显示卡片估算高度（根据是否有估值偏差行动态调整）
+    private var primaryCardEstimatedHeight: CGFloat {
+        var h: CGFloat = 170 // 基础高度（tags + code + name + status + metrics）
+        if let primary = viewModel.primaryAsset {
+            if primary.estimateComparison != nil { h += 32 }
+            if primary.shares > 0 { h += 18 }
+        }
+        return h
+    }
+
+    /// 自选资产列表估算高度（每行根据实际内容动态计算）
+    private var estimatedAssetListHeight: CGFloat {
+        guard !viewModel.assets.isEmpty else { return 0 }
+        let sectionHeader: CGFloat = 46 // "自选资产" 标题行 + padding
+        let sectionPadding: CGFloat = 28 // 上下 padding
+        let rowSpacing: CGFloat = 10
+        let rowHeights: CGFloat = viewModel.assets.reduce(0) { total, asset in
+            var rowH: CGFloat = viewModel.isManagingAssets ? 160 : 120
+            if asset.estimateComparison != nil { rowH += 30 }
+            if asset.shares > 0 { rowH += 0 } // 盈亏行已包含在基础高度
+            return total + rowH
+        }
+        let spacings = CGFloat(max(viewModel.assets.count - 1, 0)) * rowSpacing
+        return sectionHeader + sectionPadding + rowHeights + spacings
     }
 
     var body: some View {
@@ -105,7 +136,7 @@ struct MenuBarContentView: View {
     }
 
     private var shouldShowContentScrollIndicator: Bool {
-        viewModel.assets.count > 2 || viewModel.editorState != nil || (viewModel.errorMessage?.isEmpty == false) || viewModel.pendingDeleteCode != nil
+        panelHeight >= screenMaxHeight || viewModel.editorState != nil || (viewModel.errorMessage?.isEmpty == false) || viewModel.pendingDeleteCode != nil
     }
 
     private var header: some View {
@@ -150,6 +181,14 @@ struct MenuBarContentView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(FundBarCardBackground(tint: Color.white.opacity(0.82)))
+    }
+
+    private var colorSchemeIcon: String {
+        switch viewModel.colorSchemePreference {
+        case .system: return "circle.lefthalf.filled"
+        case .light: return "sun.max.fill"
+        case .dark: return "moon.fill"
+        }
     }
 
     private var marketStateTone: Color {
@@ -372,10 +411,13 @@ struct MenuBarContentView: View {
                         onDelete: { viewModel.pendingDeleteCode = fund.storageCode }
                     )
                 }
+                .onMove { source, destination in
+                    viewModel.moveAssets(fromOffsets: source, toOffset: destination)
+                }
             }
 
             if viewModel.isManagingAssets {
-                Text("管理模式已开启：可直接编辑、删除，或切换主显示。")
+                Text("管理模式：可编辑、删除、切换主显示，或拖拽排序。")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(FundBarTheme.textSecondary)
                     .padding(.top, 2)
@@ -436,6 +478,54 @@ struct MenuBarContentView: View {
                 .controlSize(.mini)
                 .tint(FundBarTheme.accent)
 
+                Menu {
+                    ForEach(AppColorSchemePreference.allCases, id: \.self) { scheme in
+                        Button {
+                            viewModel.setColorScheme(scheme)
+                        } label: {
+                            if scheme == viewModel.colorSchemePreference {
+                                Label(scheme.title, systemImage: "checkmark")
+                            } else {
+                                Text(scheme.title)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: colorSchemeIcon)
+                            .font(.system(size: 10, weight: .semibold))
+                        Text(viewModel.colorSchemePreference.title)
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .foregroundStyle(FundBarTheme.textSecondary)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+
+                Menu {
+                    ForEach(StatusBarDisplayMode.allCases, id: \.self) { mode in
+                        Button {
+                            viewModel.setStatusBarDisplayMode(mode)
+                        } label: {
+                            if mode == viewModel.statusBarDisplayMode {
+                                Label(mode.title, systemImage: "checkmark")
+                            } else {
+                                Text(mode.title)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "menubar.rectangle")
+                            .font(.system(size: 10, weight: .semibold))
+                        Text("状态栏")
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .foregroundStyle(FundBarTheme.textSecondary)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+
                 Spacer()
 
                 if !isShowingSupportCard {
@@ -459,7 +549,7 @@ struct MenuBarContentView: View {
 
     private var supportOverlay: some View {
         ZStack {
-            Color.white.opacity(0.96)
+            FundBarTheme.canvasBase.opacity(0.96)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     collapseSupportCard()
@@ -545,12 +635,12 @@ struct MenuBarContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.white)
+                .fill(FundBarTheme.canvasBase)
         )
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(Color(red: 0.88, green: 0.92, blue: 0.98), lineWidth: 0.8)
+                .stroke(FundBarTheme.textTertiary.opacity(0.20), lineWidth: 0.8)
         )
         .shadow(color: FundBarTheme.softShadow.opacity(0.12), radius: 18, x: 0, y: 10)
     }
@@ -707,20 +797,8 @@ struct MenuBarContentView: View {
         .background(FundBarCardBackground(tint: Color(red: 1.0, green: 0.97, blue: 0.95)))
     }
 
-    @ViewBuilder
     private func sourceModeTag(_ mode: SnapshotSourceMode?) -> some View {
-        switch mode {
-        case .realtime:
-            FundBarTag(text: "实时", tone: FundBarTheme.negative)
-        case .estimated:
-            FundBarTag(text: "本地估算", tone: FundBarTheme.stale)
-        case .preOpenEstimated:
-            FundBarTag(text: "盘前估算", tone: FundBarTheme.accent)
-        case .estimatedClosed:
-            FundBarTag(text: "本地参考", tone: FundBarTheme.textSecondary)
-        case .official, nil:
-            EmptyView()
-        }
+        FundBarSourceModeTag(mode: mode)
     }
 
     private func statusMessageView(_ message: String) -> some View {

@@ -37,11 +37,13 @@ struct StatusBarLabelView: View {
     }
 
     private func populatedLabel(_ primaryAsset: FundViewData) -> some View {
+        let displayMode = viewModel.statusBarDisplayMode
         let currentTrend = trend(for: primaryAsset.displayChangePct)
         let arrowTrend = isFlashing ? (flashTrendOverride ?? currentTrend) : currentTrend
-        let amountText = DisplayFormatting.shouldShowProfitAmount(for: primaryAsset)
-            ? DisplayFormatting.compactStatusBarAmount(primaryAsset.estimatedProfitAmount)
-            : nil
+        let hasProfitAmount = DisplayFormatting.shouldShowProfitAmount(for: primaryAsset)
+        let showAmount = hasProfitAmount && (displayMode == .percentAndAmount || displayMode == .amountOnly)
+        let showPercent = displayMode == .percentOnly || displayMode == .percentAndAmount || (displayMode == .amountOnly && !hasProfitAmount)
+        let amountText = showAmount ? DisplayFormatting.compactStatusBarAmount(primaryAsset.estimatedProfitAmount) : nil
         let percentText = DisplayFormatting.compactStatusBarPercent(primaryAsset.displayChangePct)
         let sessionText = viewModel.statusBarSessionText
 
@@ -55,14 +57,20 @@ struct StatusBarLabelView: View {
                     .contentTransition(.numericText())
             }
 
-            Text(percentText)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(currentTrend.color.opacity(isFlashing ? 1.0 : 0.94))
-                .monospacedDigit()
-                .lineLimit(1)
-                .contentTransition(.numericText())
+            if showPercent {
+                Text(percentText)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(currentTrend.color.opacity(isFlashing ? 1.0 : 0.94))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .contentTransition(.numericText())
+            }
 
-            if let sessionText {
+            if displayMode == .hidden {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(currentTrend.color.opacity(0.88))
+            } else if let sessionText {
                 Text(sessionText)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Color.white)

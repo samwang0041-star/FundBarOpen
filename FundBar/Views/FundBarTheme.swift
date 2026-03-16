@@ -1,16 +1,30 @@
 import SwiftUI
 
 enum FundBarTheme {
+    // Accent colors (same in both modes)
     static let accent = Color(red: 0.22, green: 0.57, blue: 0.97)
     static let accentSoft = Color(red: 0.70, green: 0.90, blue: 1.0)
     static let accentDeep = Color(red: 0.14, green: 0.39, blue: 0.86)
+
+    // Semantic colors (same in both modes - intentional for financial data)
     static let positive = Color(red: 0.88, green: 0.35, blue: 0.36)
     static let negative = Color(red: 0.25, green: 0.71, blue: 0.54)
     static let stale = Color(red: 0.94, green: 0.60, blue: 0.27)
-    static let textPrimary = Color(red: 0.16, green: 0.19, blue: 0.24)
-    static let textSecondary = Color(red: 0.40, green: 0.45, blue: 0.54)
-    static let textTertiary = Color(red: 0.62, green: 0.66, blue: 0.74)
+
+    // Adaptive text colors
+    static let textPrimary = Color("TextPrimary", bundle: nil)
+    static let textSecondary = Color("TextSecondary", bundle: nil)
+    static let textTertiary = Color("TextTertiary", bundle: nil)
+
+    // Adaptive surface colors
+    static let cardFill = Color("CardFill", bundle: nil)
+    static let canvasBase = Color("CanvasBase", bundle: nil)
     static let softShadow = Color.black.opacity(0.10)
+
+    // Fallback colors (used when asset catalog colors are not available)
+    static let textPrimaryLight = Color(red: 0.16, green: 0.19, blue: 0.24)
+    static let textSecondaryLight = Color(red: 0.40, green: 0.45, blue: 0.54)
+    static let textTertiaryLight = Color(red: 0.62, green: 0.66, blue: 0.74)
 
     static func trendColor(_ value: Double?) -> Color {
         guard let value else { return textSecondary }
@@ -21,43 +35,68 @@ enum FundBarTheme {
 }
 
 struct FundBarCanvasBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0.96),
-                    FundBarTheme.accentSoft.opacity(0.38),
-                    Color.white.opacity(0.92)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            Circle()
-                .fill(FundBarTheme.accentSoft.opacity(0.55))
-                .frame(width: 220, height: 220)
-                .blur(radius: 70)
-                .offset(x: 150, y: -180)
-
-            Circle()
-                .fill(Color.white.opacity(0.88))
-                .frame(width: 240, height: 240)
-                .blur(radius: 85)
-                .offset(x: -180, y: 180)
+            if colorScheme == .dark {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.10, green: 0.11, blue: 0.14).opacity(0.96),
+                        FundBarTheme.accent.opacity(0.12),
+                        Color(red: 0.10, green: 0.11, blue: 0.14).opacity(0.92)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                Circle()
+                    .fill(FundBarTheme.accent.opacity(0.15))
+                    .frame(width: 220, height: 220)
+                    .blur(radius: 70)
+                    .offset(x: 150, y: -180)
+                Circle()
+                    .fill(Color.black.opacity(0.30))
+                    .frame(width: 240, height: 240)
+                    .blur(radius: 85)
+                    .offset(x: -180, y: 180)
+            } else {
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.96),
+                        FundBarTheme.accentSoft.opacity(0.38),
+                        Color.white.opacity(0.92)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                Circle()
+                    .fill(FundBarTheme.accentSoft.opacity(0.55))
+                    .frame(width: 220, height: 220)
+                    .blur(radius: 70)
+                    .offset(x: 150, y: -180)
+                Circle()
+                    .fill(Color.white.opacity(0.88))
+                    .frame(width: 240, height: 240)
+                    .blur(radius: 85)
+                    .offset(x: -180, y: 180)
+            }
         }
     }
 }
 
 struct FundBarCardBackground: View {
     var tint: Color = Color.white
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
+        let baseTint = colorScheme == .dark ? Color(red: 0.16, green: 0.18, blue: 0.22) : tint
+        let borderColor = colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.56)
         RoundedRectangle(cornerRadius: 20, style: .continuous)
             .fill(
                 LinearGradient(
                     colors: [
-                        tint.opacity(0.92),
-                        Color.white.opacity(0.72)
+                        baseTint.opacity(colorScheme == .dark ? 0.85 : 0.92),
+                        (colorScheme == .dark ? Color(red: 0.12, green: 0.14, blue: 0.18) : Color.white).opacity(0.72)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -65,45 +104,67 @@ struct FundBarCardBackground: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(Color.white.opacity(0.56), lineWidth: 0.5)
+                    .stroke(borderColor, lineWidth: 0.5)
             )
-            .shadow(color: FundBarTheme.softShadow.opacity(0.06), radius: 8, x: 0, y: 4)
-            .shadow(color: FundBarTheme.softShadow.opacity(0.04), radius: 20, x: 0, y: 12)
+            .shadow(color: FundBarTheme.softShadow.opacity(colorScheme == .dark ? 0.20 : 0.06), radius: 8, x: 0, y: 4)
+            .shadow(color: FundBarTheme.softShadow.opacity(colorScheme == .dark ? 0.14 : 0.04), radius: 20, x: 0, y: 12)
     }
 }
 
 struct FundBarHeroBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.90, green: 0.96, blue: 1.0),
-                    Color(red: 0.77, green: 0.90, blue: 1.0),
-                    Color(red: 0.68, green: 0.84, blue: 1.0)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            Circle()
-                .fill(Color.white.opacity(0.65))
-                .frame(width: 150, height: 150)
-                .blur(radius: 22)
-                .offset(x: 130, y: -70)
-
-            Circle()
-                .fill(FundBarTheme.accent.opacity(0.12))
-                .frame(width: 180, height: 180)
-                .blur(radius: 24)
-                .offset(x: -120, y: 80)
+            if colorScheme == .dark {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.12, green: 0.16, blue: 0.26),
+                        Color(red: 0.10, green: 0.14, blue: 0.24),
+                        Color(red: 0.08, green: 0.12, blue: 0.22)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                Circle()
+                    .fill(FundBarTheme.accent.opacity(0.20))
+                    .frame(width: 150, height: 150)
+                    .blur(radius: 22)
+                    .offset(x: 130, y: -70)
+                Circle()
+                    .fill(FundBarTheme.accent.opacity(0.10))
+                    .frame(width: 180, height: 180)
+                    .blur(radius: 24)
+                    .offset(x: -120, y: 80)
+            } else {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.90, green: 0.96, blue: 1.0),
+                        Color(red: 0.77, green: 0.90, blue: 1.0),
+                        Color(red: 0.68, green: 0.84, blue: 1.0)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                Circle()
+                    .fill(Color.white.opacity(0.65))
+                    .frame(width: 150, height: 150)
+                    .blur(radius: 22)
+                    .offset(x: 130, y: -70)
+                Circle()
+                    .fill(FundBarTheme.accent.opacity(0.12))
+                    .frame(width: 180, height: 180)
+                    .blur(radius: 24)
+                    .offset(x: -120, y: 80)
+            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.white.opacity(0.50), lineWidth: 0.5)
+                .stroke((colorScheme == .dark ? Color.white.opacity(0.10) : Color.white.opacity(0.50)), lineWidth: 0.5)
         )
-        .shadow(color: FundBarTheme.accent.opacity(0.10), radius: 16, x: 0, y: 8)
-        .shadow(color: FundBarTheme.accent.opacity(0.06), radius: 28, x: 0, y: 14)
+        .shadow(color: FundBarTheme.accent.opacity(colorScheme == .dark ? 0.20 : 0.10), radius: 16, x: 0, y: 8)
+        .shadow(color: FundBarTheme.accent.opacity(colorScheme == .dark ? 0.12 : 0.06), radius: 28, x: 0, y: 14)
     }
 }
 
@@ -202,6 +263,25 @@ struct FundBarMetricChip: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.white.opacity(0.46))
         )
+    }
+}
+
+struct FundBarSourceModeTag: View {
+    let mode: SnapshotSourceMode?
+
+    var body: some View {
+        switch mode {
+        case .realtime:
+            FundBarTag(text: "实时", tone: FundBarTheme.negative)
+        case .estimated:
+            FundBarTag(text: "本地估算", tone: FundBarTheme.stale)
+        case .preOpenEstimated:
+            FundBarTag(text: "盘前估算", tone: FundBarTheme.accent)
+        case .estimatedClosed:
+            FundBarTag(text: "本地参考", tone: FundBarTheme.textSecondary)
+        case .official, nil:
+            EmptyView()
+        }
     }
 }
 

@@ -44,16 +44,24 @@ final class FundStore {
 
     func loadTrackedFunds() throws -> [TrackedFund] {
         let funds = try context.fetch(FetchDescriptor<TrackedFund>())
-        let ranked = funds.map { fund in
-            (fund: fund, isPrimary: fund.isPrimary, updatedAt: fund.updatedAt)
-        }
-        return ranked.sorted {
+        return funds.sorted {
             if $0.isPrimary != $1.isPrimary {
                 return $0.isPrimary && !$1.isPrimary
             }
-            return $0.updatedAt > $1.updatedAt
+            if $0.sortOrder != $1.sortOrder {
+                return $0.sortOrder < $1.sortOrder
+            }
+            return $0.createdAt < $1.createdAt
         }
-        .map(\.fund)
+    }
+
+    func moveAssets(fromOffsets source: IndexSet, toOffset destination: Int) throws {
+        var funds = try loadTrackedFunds()
+        funds.move(fromOffsets: source, toOffset: destination)
+        for (index, fund) in funds.enumerated() {
+            fund.sortOrder = index
+        }
+        try save()
     }
 
     func loadSnapshots() throws -> [FundSnapshot] {
@@ -191,7 +199,8 @@ final class FundStore {
             throw FundStoreError.maximumTrackedFundsReached
         }
 
-        let trackedFund = TrackedFund(code: storageCode, shares: shares, isPrimary: false)
+        let nextSortOrder = (existingFunds.map(\.sortOrder).max() ?? -1) + 1
+        let trackedFund = TrackedFund(code: storageCode, shares: shares, isPrimary: false, sortOrder: nextSortOrder)
         context.insert(trackedFund)
         if makePrimary || existingFunds.isEmpty {
             try setPrimary(storageCode: storageCode)
@@ -317,6 +326,10 @@ final class FundStore {
 
     func currentPreference() throws -> AppPreference? {
         try context.fetch(FetchDescriptor<AppPreference>()).first
+    }
+
+    func saveContext() throws {
+        try save()
     }
 
     private func save() throws {

@@ -115,18 +115,50 @@ enum PersistenceSyncMode: String, Codable, Sendable {
     case localFallback
 }
 
+enum StatusBarDisplayMode: String, Codable, Sendable, CaseIterable {
+    case percentOnly
+    case percentAndAmount
+    case amountOnly
+    case hidden
+
+    var title: String {
+        switch self {
+        case .percentOnly: return "仅涨跌幅"
+        case .percentAndAmount: return "涨跌幅+盈亏"
+        case .amountOnly: return "仅盈亏金额"
+        case .hidden: return "仅图标"
+        }
+    }
+}
+
+enum AppColorSchemePreference: String, Codable, Sendable, CaseIterable {
+    case system
+    case light
+    case dark
+
+    var title: String {
+        switch self {
+        case .system: return "跟随系统"
+        case .light: return "浅色"
+        case .dark: return "深色"
+        }
+    }
+}
+
 @Model
 final class TrackedFund {
     var code: String = ""
     var shares: Double = 0
     var isPrimary: Bool = false
+    var sortOrder: Int = 0
     var createdAt: Date = Date.now
     var updatedAt: Date = Date.now
 
-    init(code: String, shares: Double, isPrimary: Bool, createdAt: Date = .now, updatedAt: Date = .now) {
+    init(code: String, shares: Double, isPrimary: Bool, sortOrder: Int = 0, createdAt: Date = .now, updatedAt: Date = .now) {
         self.code = code
         self.shares = shares
         self.isPrimary = isPrimary
+        self.sortOrder = sortOrder
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -244,22 +276,38 @@ final class AppPreference {
     var syncModeRaw: String = PersistenceSyncMode.localFallback.rawValue
     var syncStatusMessage: String = ""
     var lastRefreshAt: Date? = nil
+    var colorSchemeRaw: String = AppColorSchemePreference.light.rawValue
+    var statusBarDisplayModeRaw: String = StatusBarDisplayMode.percentAndAmount.rawValue
 
     init(
         key: String = "main",
         syncMode: PersistenceSyncMode,
         syncStatusMessage: String,
-        lastRefreshAt: Date? = nil
+        lastRefreshAt: Date? = nil,
+        colorScheme: AppColorSchemePreference = .light,
+        statusBarDisplayMode: StatusBarDisplayMode = .percentAndAmount
     ) {
         self.key = key
         self.syncModeRaw = syncMode.rawValue
         self.syncStatusMessage = syncStatusMessage
         self.lastRefreshAt = lastRefreshAt
+        self.colorSchemeRaw = colorScheme.rawValue
+        self.statusBarDisplayModeRaw = statusBarDisplayMode.rawValue
     }
 
     var syncMode: PersistenceSyncMode {
         get { PersistenceSyncMode(rawValue: syncModeRaw) ?? .localFallback }
         set { syncModeRaw = newValue.rawValue }
+    }
+
+    var colorSchemePreference: AppColorSchemePreference {
+        get { AppColorSchemePreference(rawValue: colorSchemeRaw) ?? .light }
+        set { colorSchemeRaw = newValue.rawValue }
+    }
+
+    var statusBarDisplayMode: StatusBarDisplayMode {
+        get { StatusBarDisplayMode(rawValue: statusBarDisplayModeRaw) ?? .percentAndAmount }
+        set { statusBarDisplayModeRaw = newValue.rawValue }
     }
 }
 
