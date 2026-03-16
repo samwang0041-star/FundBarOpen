@@ -99,7 +99,7 @@ struct AddEditFundSheet: View {
             .padding(12)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white.opacity(0.56))
+                    .fill(FundBarTheme.chipFill)
             )
 
             HStack {
@@ -265,7 +265,7 @@ struct AddEditFundSheet: View {
                 .padding(.vertical, 12)
                 .background(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.white.opacity(0.64))
+                        .fill(FundBarTheme.chipFill)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)

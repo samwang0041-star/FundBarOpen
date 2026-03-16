@@ -327,7 +327,7 @@ struct MenuBarContentView: View {
         .padding(.vertical, 7)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.40))
+                .fill(FundBarTheme.chipFill)
         )
     }
 
@@ -737,7 +737,7 @@ struct MenuBarContentView: View {
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.92))
+                .fill(FundBarTheme.chipFillStrong)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)

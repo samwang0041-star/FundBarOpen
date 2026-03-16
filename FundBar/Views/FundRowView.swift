@@ -155,7 +155,7 @@ struct FundRowView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.50))
+                .fill(FundBarTheme.chipFill)
         )
     }
 
@@ -183,7 +183,7 @@ struct FundRowView: View {
         .padding(.vertical, 5)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.white.opacity(0.40))
+                .fill(FundBarTheme.chipFill)
         )
     }
 

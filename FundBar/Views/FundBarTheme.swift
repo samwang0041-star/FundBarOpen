@@ -11,20 +11,47 @@ enum FundBarTheme {
     static let negative = Color(red: 0.25, green: 0.71, blue: 0.54)
     static let stale = Color(red: 0.94, green: 0.60, blue: 0.27)
 
-    // Adaptive text colors
-    static let textPrimary = Color("TextPrimary", bundle: nil)
-    static let textSecondary = Color("TextSecondary", bundle: nil)
-    static let textTertiary = Color("TextTertiary", bundle: nil)
+    // Adaptive text colors (using NSColor dynamic provider for correct NSPopover appearance)
+    static let textPrimary = Color(nsColor: NSColor(name: "DynamicTextPrimary", dynamicProvider: { appearance in
+        appearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+            ? NSColor(red: 0.93, green: 0.94, blue: 0.96, alpha: 1.0)
+            : NSColor(red: 0.16, green: 0.19, blue: 0.24, alpha: 1.0)
+    }))
+    static let textSecondary = Color(nsColor: NSColor(name: "DynamicTextSecondary", dynamicProvider: { appearance in
+        appearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+            ? NSColor(red: 0.62, green: 0.65, blue: 0.70, alpha: 1.0)
+            : NSColor(red: 0.40, green: 0.45, blue: 0.54, alpha: 1.0)
+    }))
+    static let textTertiary = Color(nsColor: NSColor(name: "DynamicTextTertiary", dynamicProvider: { appearance in
+        appearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+            ? NSColor(red: 0.45, green: 0.48, blue: 0.53, alpha: 1.0)
+            : NSColor(red: 0.62, green: 0.66, blue: 0.74, alpha: 1.0)
+    }))
 
     // Adaptive surface colors
-    static let cardFill = Color("CardFill", bundle: nil)
-    static let canvasBase = Color("CanvasBase", bundle: nil)
+    static let cardFill = Color(nsColor: NSColor(name: "DynamicCardFill", dynamicProvider: { appearance in
+        appearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+            ? NSColor(red: 0.16, green: 0.18, blue: 0.22, alpha: 0.85)
+            : NSColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.82)
+    }))
+    static let canvasBase = Color(nsColor: NSColor(name: "DynamicCanvasBase", dynamicProvider: { appearance in
+        appearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+            ? NSColor(red: 0.11, green: 0.12, blue: 0.15, alpha: 0.96)
+            : NSColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.96)
+    }))
     static let softShadow = Color.black.opacity(0.10)
 
-    // Fallback colors (used when asset catalog colors are not available)
-    static let textPrimaryLight = Color(red: 0.16, green: 0.19, blue: 0.24)
-    static let textSecondaryLight = Color(red: 0.40, green: 0.45, blue: 0.54)
-    static let textTertiaryLight = Color(red: 0.62, green: 0.66, blue: 0.74)
+    // Adaptive chip/pill background
+    static let chipFill = Color(nsColor: NSColor(name: "DynamicChipFill", dynamicProvider: { appearance in
+        appearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+            ? NSColor(white: 1.0, alpha: 0.08)
+            : NSColor(white: 1.0, alpha: 0.50)
+    }))
+    static let chipFillStrong = Color(nsColor: NSColor(name: "DynamicChipFillStrong", dynamicProvider: { appearance in
+        appearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+            ? NSColor(white: 1.0, alpha: 0.12)
+            : NSColor(white: 1.0, alpha: 0.92)
+    }))
 
     static func trendColor(_ value: Double?) -> Color {
         guard let value else { return textSecondary }
@@ -261,7 +288,7 @@ struct FundBarMetricChip: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(0.46))
+                .fill(FundBarTheme.chipFill)
         )
     }
 }
@@ -317,7 +344,7 @@ struct FundBarButtonStyle: ButtonStyle {
         case .accent:
             return .white
         case .neutral:
-            return FundBarTheme.accentDeep
+            return FundBarTheme.accent
         case .destructive:
             return FundBarTheme.positive
         }
@@ -328,7 +355,7 @@ struct FundBarButtonStyle: ButtonStyle {
         case .accent:
             return FundBarTheme.accent.opacity(0.18)
         case .neutral:
-            return Color.white.opacity(0.50)
+            return FundBarTheme.textTertiary.opacity(0.30)
         case .destructive:
             return FundBarTheme.positive.opacity(0.12)
         }
@@ -340,7 +367,7 @@ struct FundBarButtonStyle: ButtonStyle {
         case .accent:
             return FundBarTheme.accent.opacity(pressedOpacity)
         case .neutral:
-            return Color.white.opacity(isPressed ? 0.52 : 0.72)
+            return FundBarTheme.textTertiary.opacity(isPressed ? 0.18 : 0.12)
         case .destructive:
             return FundBarTheme.positive.opacity(isPressed ? 0.12 : 0.08)
         }
