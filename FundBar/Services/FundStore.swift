@@ -110,6 +110,18 @@ final class FundStore {
         }
     }
 
+    func latestEstimateComparison(for storageCode: String) throws -> EstimateComparisonData? {
+        let observations = try loadEstimateObservations(for: storageCode)
+        guard let latest = observations.first, latest.officialNav > 0, latest.referenceValue > 0 else { return nil }
+        let errorPct = (latest.estimatedNav / latest.officialNav - 1) * 100
+        return EstimateComparisonData(
+            valuationDate: latest.valuationDate,
+            estimatedNav: latest.estimatedNav,
+            officialNav: latest.officialNav,
+            errorPct: rounded(errorPct, scale: 2)
+        )
+    }
+
     func upsertTrackedFund(code rawCode: String, assetKind: AssetKind, shares: Double, makePrimary: Bool) throws -> TrackedFund {
         try saveTrackedFund(originalStorageCode: nil, code: rawCode, assetKind: assetKind, shares: shares, makePrimary: makePrimary)
     }

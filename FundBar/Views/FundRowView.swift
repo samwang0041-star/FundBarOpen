@@ -62,12 +62,16 @@ struct FundRowView: View {
                 }
             }
 
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 infoPill(title: asset.displayValueTitle, value: DisplayFormatting.displayValue(asset.displayValue, for: asset.assetKind))
                 if asset.shares > 0 {
                     infoPill(title: asset.assetKind.quantityTitle, value: DisplayFormatting.quantity(asset.shares, for: asset.assetKind))
                 }
                 infoPill(title: asset.assetKind.referenceDateTitle, value: asset.referenceDate ?? "--")
+            }
+
+            if let comparison = asset.estimateComparison {
+                compactComparisonRow(comparison)
             }
 
             if isManaging {
@@ -164,6 +168,34 @@ struct FundRowView: View {
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.white.opacity(0.50))
+        )
+    }
+
+    private func compactComparisonRow(_ comparison: EstimateComparisonData) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "arrow.left.arrow.right")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(FundBarTheme.accent)
+            Text("\(comparison.valuationDate)")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(FundBarTheme.textTertiary)
+            Text("预估 \(DisplayFormatting.nav(comparison.estimatedNav))")
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(FundBarTheme.textSecondary)
+            Text("官方 \(DisplayFormatting.nav(comparison.officialNav))")
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(FundBarTheme.textSecondary)
+            Spacer()
+            let errorColor = abs(comparison.errorPct) <= 0.3 ? FundBarTheme.negative : (abs(comparison.errorPct) <= 0.8 ? FundBarTheme.stale : FundBarTheme.positive)
+            Text("偏差\(DisplayFormatting.signedPercent(comparison.errorPct))")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(errorColor)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(0.40))
         )
     }
 

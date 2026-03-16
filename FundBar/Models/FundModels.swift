@@ -374,6 +374,13 @@ struct EstimateLearningSummary: Equatable, Sendable {
     let confidence: EstimateConfidence
 }
 
+struct EstimateComparisonData: Equatable {
+    let valuationDate: String
+    let estimatedNav: Double
+    let officialNav: Double
+    let errorPct: Double
+}
+
 struct FundViewData: Identifiable, Equatable {
     var id: String { storageCode }
     let storageCode: String
@@ -391,6 +398,7 @@ struct FundViewData: Identifiable, Equatable {
     let sourceMode: SnapshotSourceMode?
     let statusMessage: String
     let learningSummary: EstimateLearningSummary?
+    let estimateComparison: EstimateComparisonData?
 
     init(
         storageCode: String,
@@ -407,7 +415,8 @@ struct FundViewData: Identifiable, Equatable {
         isStale: Bool,
         sourceMode: SnapshotSourceMode?,
         statusMessage: String,
-        learningSummary: EstimateLearningSummary? = nil
+        learningSummary: EstimateLearningSummary? = nil,
+        estimateComparison: EstimateComparisonData? = nil
     ) {
         self.storageCode = storageCode
         self.assetKind = assetKind
@@ -424,6 +433,7 @@ struct FundViewData: Identifiable, Equatable {
         self.sourceMode = sourceMode
         self.statusMessage = statusMessage
         self.learningSummary = learningSummary
+        self.estimateComparison = estimateComparison
     }
 
     var displayValueTitle: String {

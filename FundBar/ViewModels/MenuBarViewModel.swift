@@ -350,6 +350,7 @@ final class MenuBarViewModel: ObservableObject {
 
         assets = trackedAssets.map { asset in
             let snapshot = snapshots[asset.code]
+            let comparison: EstimateComparisonData? = asset.assetKind == .fund ? (try? store.latestEstimateComparison(for: asset.code)) : nil
             return FundViewData(
                 storageCode: asset.code,
                 assetKind: asset.assetKind,
@@ -365,7 +366,8 @@ final class MenuBarViewModel: ObservableObject {
                 isStale: snapshot?.isStale ?? false,
                 sourceMode: snapshot?.sourceMode,
                 statusMessage: resolvedStatusMessage(snapshot: snapshot, assetKind: asset.assetKind),
-                learningSummary: learningSummaries[asset.code]
+                learningSummary: learningSummaries[asset.code],
+                estimateComparison: comparison
             )
         }
 
