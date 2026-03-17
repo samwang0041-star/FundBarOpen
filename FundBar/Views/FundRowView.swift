@@ -8,13 +8,15 @@ struct FundRowView: View {
     let onDelete: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 8) {
-                        Text(asset.code)
+        VStack(alignment: .leading, spacing: 8) {
+            // 第一行：名称 + 标签 | 涨跌幅 + 盈亏
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(asset.name)
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(FundBarTheme.textPrimary)
+                            .lineLimit(1)
                         FundBarTag(text: asset.assetKind.title, tone: FundBarTheme.accentDeep)
                         if asset.isPrimary {
                             FundBarTag(text: "主显示", tone: FundBarTheme.accentDeep)
@@ -24,15 +26,16 @@ struct FundRowView: View {
                             FundBarTag(text: "过期", tone: FundBarTheme.stale)
                         }
                     }
-                    Text(asset.name)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(FundBarTheme.textPrimary.opacity(0.82))
+                    HStack(spacing: 6) {
+                        Text(asset.code)
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .foregroundStyle(FundBarTheme.textSecondary)
+                        FundBarStatusMessage(
+                            text: asset.statusMessage,
+                            highlighted: asset.statusMessage.contains("官方净值已发布")
+                        )
                         .lineLimit(1)
-                    FundBarStatusMessage(
-                        text: asset.statusMessage,
-                        highlighted: asset.statusMessage.contains("官方净值已发布")
-                    )
-                    .lineLimit(1)
+                    }
                     if let diagnostics = estimateDiagnosticsText {
                         Text(diagnostics)
                             .font(.system(size: 11, weight: .medium))
@@ -42,36 +45,33 @@ struct FundRowView: View {
                 }
                 Spacer()
 
-                VStack(alignment: .trailing, spacing: 4) {
+                VStack(alignment: .trailing, spacing: 2) {
                     Text(DisplayFormatting.signedPercent(asset.displayChangePct))
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
                         .foregroundStyle(FundBarTheme.trendColor(asset.displayChangePct))
                         .monospacedDigit()
                         .contentTransition(.numericText(value: asset.displayChangePct ?? 0))
+                    Text(DisplayFormatting.displayValue(asset.displayValue, for: asset.assetKind))
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(FundBarTheme.textPrimary)
+                        .monospacedDigit()
                     if asset.shares > 0 {
                         Text(DisplayFormatting.money(asset.estimatedProfitAmount, signed: true))
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundStyle(FundBarTheme.trendColor(asset.estimatedProfitAmount).opacity(0.86))
                             .monospacedDigit()
                             .contentTransition(.numericText(value: asset.estimatedProfitAmount ?? 0))
                     }
-                    Text("更新 \(DisplayFormatting.time(asset.updatedAt))")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(FundBarTheme.textSecondary)
-                        .contentTransition(.numericText())
                 }
             }
 
+            // 第二行：关键指标 inline
             HStack(spacing: 8) {
                 infoPill(title: asset.displayValueTitle, value: DisplayFormatting.displayValue(asset.displayValue, for: asset.assetKind))
                 if asset.shares > 0 {
                     infoPill(title: asset.assetKind.quantityTitle, value: DisplayFormatting.quantity(asset.shares, for: asset.assetKind))
                 }
                 infoPill(title: asset.assetKind.referenceDateTitle, value: asset.referenceDate ?? "--")
-            }
-
-            if let comparison = asset.estimateComparison {
-                compactComparisonRow(comparison)
             }
 
             if isManaging {
@@ -89,9 +89,9 @@ struct FundRowView: View {
                         }
                         .buttonStyle(FundBarButtonStyle(tone: .neutral))
                     }
-                    
+
                     Spacer()
-                    
+
                     Button("删除", role: .destructive) {
                         HapticManager.generateFeedback()
                         onDelete()
@@ -101,7 +101,7 @@ struct FundRowView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .padding(12)
+        .padding(10)
         .background(FundBarCardBackground(tint: Color.white.opacity(isManaging ? 0.82 : 0.72)))
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -134,12 +134,24 @@ struct FundRowView: View {
         }
     }
 
+    @ViewBuilder
     private func sourceModeTag(_ mode: SnapshotSourceMode?) -> some View {
-        FundBarSourceModeTag(mode: mode)
+        switch mode {
+        case .realtime:
+            FundBarTag(text: "实时", tone: FundBarTheme.negative)
+        case .estimated:
+            FundBarTag(text: "本地估算", tone: FundBarTheme.stale)
+        case .preOpenEstimated:
+            FundBarTag(text: "盘前估算", tone: FundBarTheme.accent)
+        case .estimatedClosed:
+            FundBarTag(text: "本地参考", tone: FundBarTheme.textSecondary)
+        case .official, nil:
+            EmptyView()
+        }
     }
 
     private func infoPill(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(FundBarTheme.textSecondary)
@@ -150,40 +162,12 @@ struct FundRowView: View {
                 .lineLimit(1)
                 .contentTransition(.numericText())
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(FundBarTheme.chipFill)
-        )
-    }
-
-    private func compactComparisonRow(_ comparison: EstimateComparisonData) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: "arrow.left.arrow.right")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(FundBarTheme.accent)
-            Text("\(comparison.valuationDate)")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(FundBarTheme.textTertiary)
-            Text("预估 \(DisplayFormatting.nav(comparison.estimatedNav))")
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .foregroundStyle(FundBarTheme.textSecondary)
-            Text("官方 \(DisplayFormatting.nav(comparison.officialNav))")
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .foregroundStyle(FundBarTheme.textSecondary)
-            Spacer()
-            let errorColor = abs(comparison.errorPct) <= 0.3 ? FundBarTheme.negative : (abs(comparison.errorPct) <= 0.8 ? FundBarTheme.stale : FundBarTheme.positive)
-            Text("偏差\(DisplayFormatting.signedPercent(comparison.errorPct))")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(errorColor)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(FundBarTheme.chipFill)
+                .fill(Color.white.opacity(0.50))
         )
     }
 
